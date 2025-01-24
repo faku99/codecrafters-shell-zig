@@ -3,6 +3,7 @@ const std = @import("std");
 const Command = enum {
     echo,
     exit,
+    type,
     unknown,
 };
 
@@ -11,7 +12,7 @@ const ParsedInput = struct {
     arguments: [][]const u8,
 };
 
-fn echo(input: ParsedInput) void {
+fn echoCmd(input: ParsedInput) void {
     for (1..input.arguments.len) |i| {
         if (i > 1) std.debug.print(" ", .{});
         std.debug.print("{s}", .{input.arguments[i]});
@@ -19,10 +20,19 @@ fn echo(input: ParsedInput) void {
     std.debug.print("\n", .{});
 }
 
+fn typeCmd(input: ParsedInput) void {
+    if (std.meta.stringToEnum(Command, input.arguments[1]) != null) {
+        std.debug.print("{s} is a shell builtin\n", .{input.arguments[1]});
+    } else {
+        std.debug.print("{s}: not found\n", .{input.arguments[1]});
+    }
+}
+
 fn handleCommand(input: ParsedInput) void {
     switch (input.command) {
-        .echo => echo(input),
+        .echo => echoCmd(input),
         .exit => std.process.exit(std.fmt.parseUnsigned(u8, input.arguments[1], 10) catch 1),
+        .type => typeCmd(input),
         .unknown => std.debug.print("{s}: command not found\n", .{input.arguments[0]}),
     }
 }
