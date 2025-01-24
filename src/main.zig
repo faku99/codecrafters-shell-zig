@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const ALLOCATOR = std.heap.page_allocator;
+
 const Command = enum {
     echo,
     exit,
@@ -20,20 +22,38 @@ fn echoCmd(input: ParsedInput) void {
     std.debug.print("\n", .{});
 }
 
-fn typeCmd(input: ParsedInput) void {
-    if (std.meta.stringToEnum(Command, input.arguments[1]) != null) {
-        std.debug.print("{s} is a shell builtin\n", .{input.arguments[1]});
-    } else {
-        std.debug.print("{s}: not found\n", .{input.arguments[1]});
+fn findInPath(allocator: std.mem.Allocator, file: []const u8) !?[]const u8 {
+    const path = try std.process.getEnvVarOwned(allocator, "PATH");
+    var iter = std.mem.tokenizeAny(u8, path, ":");
+
+    while (iter.next()) |directory| {
+        var dir = std.fs.openDirAbsolute(directory, .{}) catch continue;
+        defer dir.close();
+
+        var exists = true;
+        dir.access(file, .{}) catch |e| switch (e) {
+            error.FileNotFound => exists = false,
+            else => return e,
+        };
+
+        if (exists) {
+            return try allocator.dupe(u8, directory);
+        }
     }
+
+    return null;
 }
 
-fn handleCommand(input: ParsedInput) void {
-    switch (input.command) {
-        .echo => echoCmd(input),
-        .exit => std.process.exit(std.fmt.parseUnsigned(u8, input.arguments[1], 10) catch 1),
-        .type => typeCmd(input),
-        .unknown => std.debug.print("{s}: command not found\n", .{input.arguments[0]}),
+fn typeCmd(allocator: std.mem.Allocator, input: ParsedInput) !void {
+    if (std.meta.stringToEnum(Command, input.arguments[1]) != null) {
+        std.debug.print("{s} is a shell builtin\n", .{input.arguments[1]});
+        return;
+    }
+
+    if (try findInPath(allocator, input.arguments[1])) |path| {
+        std.debug.print("{s} is {s}/{s}\n", .{ input.arguments[1], path, input.arguments[1] });
+    } else {
+        std.debug.print("{s}: not found\n", .{input.arguments[1]});
     }
 }
 
@@ -55,8 +75,6 @@ fn parseInput(allocator: std.mem.Allocator, input: []const u8) !ParsedInput {
 }
 
 pub fn main() !void {
-    const allocator = std.heap.page_allocator;
-
     while (true) {
         const stdout = std.io.getStdOut().writer();
         try stdout.print("$ ", .{});
@@ -65,8 +83,13 @@ pub fn main() !void {
         var buffer: [1024]u8 = undefined;
 
         const user_input = try stdin.readUntilDelimiter(&buffer, '\n');
-        const command = try parseInput(allocator, user_input);
+        const input = try parseInput(ALLOCATOR, user_input);
 
-        handleCommand(command);
+        switch (input.command) {
+            .echo => echoCmd(input),
+            .exit => std.process.exit(std.fmt.parseUnsigned(u8, input.arguments[1], 10) catch 1),
+            .type => try typeCmd(ALLOCATOR, input),
+            .unknown => std.debug.print("{s}: command not found\n", .{input.arguments[0]}),
+        }
     }
 }
