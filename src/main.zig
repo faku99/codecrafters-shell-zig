@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const Command = enum {
+    echo,
     exit,
     unknown,
 };
@@ -10,10 +11,19 @@ const ParsedInput = struct {
     arguments: [][]const u8,
 };
 
+fn echo(input: ParsedInput) void {
+    for (1..input.arguments.len) |i| {
+        if (i > 1) std.debug.print(" ", .{});
+        std.debug.print("{s}", .{input.arguments[i]});
+    }
+    std.debug.print("\n", .{});
+}
+
 fn handleCommand(input: ParsedInput) void {
     switch (input.command) {
+        .echo => echo(input),
         .exit => std.process.exit(std.fmt.parseUnsigned(u8, input.arguments[1], 10) catch 1),
-        else => std.debug.print("{s}: command not found\n", .{input.arguments[0]}),
+        .unknown => std.debug.print("{s}: command not found\n", .{input.arguments[0]}),
     }
 }
 
