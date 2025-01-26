@@ -16,6 +16,7 @@ const Command = union(enum) {
     unknown: []const u8,
     external: ExternalCommand,
     pwd,
+    cd: []const u8,
 
     fn parse(input: []const u8, allocator: std.mem.Allocator) !Command {
         var args = std.mem.splitSequence(u8, input, " ");
@@ -33,6 +34,8 @@ const Command = union(enum) {
             return Command{ .type = input[5..] };
         } else if (std.mem.eql(u8, first, "pwd")) {
             return Command.pwd;
+        } else if (std.mem.eql(u8, first, "cd")) {
+            return Command{ .cd = input[3..] };
         } else {
             var args_list = std.ArrayList([]const u8).init(allocator);
             try args_list.append(first);
@@ -46,6 +49,7 @@ const Command = union(enum) {
 
 fn isBuiltin(cmd: []const u8) bool {
     const builtins = [_][]const u8{
+        "cd",
         "exit",
         "echo",
         "pwd",
@@ -114,6 +118,9 @@ pub fn main() !void {
         .ok => {},
     };
 
+    // Store current directory
+    var working_dir = std.fs.cwd();
+
     while (true) {
         try stdout.print("$ ", .{});
 
@@ -144,10 +151,21 @@ pub fn main() !void {
                 try handleExternalCommand(ext, allocator);
             },
             .pwd => {
-                const path = try std.fs.cwd().realpathAlloc(allocator, ".");
+                const path = try working_dir.realpathAlloc(allocator, ".");
                 defer allocator.free(path);
 
                 std.debug.print("{s}\n", .{path});
+            },
+            .cd => |path| {
+                const dir = std.fs.openDirAbsolute(path, .{}) catch |e| {
+                    switch (e) {
+                        error.FileNotFound => std.debug.print("cd: {s}: No such file or directory\n", .{path}),
+                        else => std.debug.print("cd: {s}: Unknown error '{s}'\n", .{ path, @typeName(@TypeOf(e)) }),
+                    }
+                    continue;
+                };
+
+                working_dir = dir;
             },
             .unknown => |cmd| {
                 std.debug.print("{s}: command not found\n", .{cmd});
