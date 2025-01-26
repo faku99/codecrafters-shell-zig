@@ -15,8 +15,7 @@ const Command = union(enum) {
     type: []const u8,
     unknown: []const u8,
     external: ExternalCommand,
-    // pwd,
-    // cd: ?[]const u8,
+    pwd,
 
     fn parse(input: []const u8, allocator: std.mem.Allocator) !Command {
         var args = std.mem.splitSequence(u8, input, " ");
@@ -32,10 +31,8 @@ const Command = union(enum) {
             return Command{ .echo = input[5..] };
         } else if (std.mem.eql(u8, first, "type")) {
             return Command{ .type = input[5..] };
-            // } else if (std.mem.eql(u8, first, "pwd")) {
-            //     return Command.pwd;
-            // } else if (std.mem.eql(u8, first, "cd")) {
-            //     return Command{ .cd = args.next() };
+        } else if (std.mem.eql(u8, first, "pwd")) {
+            return Command.pwd;
         } else {
             var args_list = std.ArrayList([]const u8).init(allocator);
             try args_list.append(first);
@@ -48,7 +45,12 @@ const Command = union(enum) {
 };
 
 fn isBuiltin(cmd: []const u8) bool {
-    const builtins = [_][]const u8{ "exit, echo", "type" };
+    const builtins = [_][]const u8{
+        "exit",
+        "echo",
+        "pwd",
+        "type",
+    };
     for (builtins) |builtin| {
         if (std.mem.eql(u8, cmd, builtin)) return true;
     }
@@ -117,7 +119,7 @@ pub fn main() !void {
 
         const stdin = std.io.getStdIn().reader();
         var buffer: [1024]u8 = undefined;
-        const user_input = try stdin.readUntilDelimiter(&buffer, '\n');
+        const user_input = stdin.readUntilDelimiter(&buffer, '\n') catch break;
 
         if (user_input.len == 0) continue;
 
@@ -141,7 +143,15 @@ pub fn main() !void {
             .external => |ext| {
                 try handleExternalCommand(ext, allocator);
             },
-            else => {},
+            .pwd => {
+                const path = try std.fs.cwd().realpathAlloc(allocator, ".");
+                defer allocator.free(path);
+
+                std.debug.print("{s}\n", .{path});
+            },
+            .unknown => |cmd| {
+                std.debug.print("{s}: command not found\n", .{cmd});
+            },
         }
     }
 }
