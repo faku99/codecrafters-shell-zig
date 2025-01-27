@@ -35,6 +35,14 @@ const Command = union(enum) {
         } else if (std.mem.eql(u8, first, "pwd")) {
             return Command.pwd;
         } else if (std.mem.eql(u8, first, "cd")) {
+            // Replace "~" with $HOME
+            if (std.mem.eql(u8, input[3..], "~")) {
+                const home_var = try std.process.getEnvVarOwned(allocator, "HOME");
+                defer allocator.free(home_var);
+
+                return Command{ .cd = try allocator.dupe(u8, home_var) };
+            }
+
             return Command{ .cd = input[3..] };
         } else {
             var args_list = std.ArrayList([]const u8).init(allocator);
