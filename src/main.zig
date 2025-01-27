@@ -71,6 +71,8 @@ fn isBuiltin(cmd: []const u8) bool {
 
 fn findExecutable(executable: []const u8, allocator: std.mem.Allocator) !?[]const u8 {
     const path_var = try std.process.getEnvVarOwned(allocator, "PATH");
+    defer allocator.free(path_var);
+
     var iter = std.mem.tokenizeAny(u8, path_var, ":");
 
     while (iter.next()) |directory| {
@@ -98,7 +100,9 @@ fn findExecutable(executable: []const u8, allocator: std.mem.Allocator) !?[]cons
 }
 
 fn handleExternalCommand(command: ExternalCommand, allocator: std.mem.Allocator) !void {
-    if (try findExecutable(command.args[0], allocator) != null) {
+    if (try findExecutable(command.args[0], allocator)) |path| {
+        defer allocator.free(path);
+
         var child = std.process.Child.init(command.args, allocator);
         const term = try child.spawnAndWait();
 
