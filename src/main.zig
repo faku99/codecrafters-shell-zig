@@ -157,7 +157,7 @@ pub fn main() !void {
                 std.debug.print("{s}\n", .{path});
             },
             .cd => |path| {
-                const dir = std.fs.openDirAbsolute(path, .{}) catch |e| {
+                const dir = working_dir.openDir(path, .{}) catch |e| {
                     switch (e) {
                         error.FileNotFound => std.debug.print("cd: {s}: No such file or directory\n", .{path}),
                         else => std.debug.print("cd: {s}: Unknown error '{s}'\n", .{ path, @typeName(@TypeOf(e)) }),
